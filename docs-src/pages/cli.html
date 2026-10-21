@@ -1,0 +1,54 @@
+<h1>CLI and REST API</h1>
+<p class="lead">The <code>duod</code> binary is both the operator and its command-line client.</p>
+
+<h2>Connect the CLI</h2>
+<pre><code>export DUOD_SERVER=http://127.0.0.1:9800 DUOD_TOKEN=...</code></pre>
+
+<h2>Commands</h2>
+<table>
+  <tr><th>Command</th><th>What it does</th></tr>
+  <tr><td><code>duod run -config FILE [-log-format text|json]</code></td><td>Run the operator. The systemd unit does this.</td></tr>
+  <tr><td><code>duod validate -config FILE</code></td><td>Check a config and print each app's Traefik file.</td></tr>
+  <tr><td><code>duod list</code></td><td>All apps with phase, sync status and revisions.</td></tr>
+  <tr><td><code>duod get &lt;app&gt;</code></td><td>Phase, sync, active, preview and previous slot.</td></tr>
+  <tr><td><code>duod history &lt;app&gt;</code></td><td>Event log: <code>RolloutQueued</code>, <code>RolloutStarted</code>, <code>PreviewHealthy</code>, <code>Promoted</code> and more.</td></tr>
+  <tr><td><code>duod sync &lt;app&gt;</code></td><td>Fetch Git now.</td></tr>
+  <tr><td><code>duod promote &lt;app&gt;</code></td><td>Paused: switch traffic to the preview.</td></tr>
+  <tr><td><code>duod abort &lt;app&gt;</code></td><td>Cancel the analysis or discard the paused preview.</td></tr>
+  <tr><td><code>duod rollback &lt;app&gt;</code></td><td>Back to the previous slot. No Git change needed.</td></tr>
+  <tr><td><code>duod retry &lt;app&gt;</code></td><td>Clear the failed-revision marker and try again.</td></tr>
+  <tr><td><code>duod version</code></td><td>Print the version.</td></tr>
+</table>
+
+<h2>Example output</h2>
+<pre><code>$ duod list
+APP   PHASE     SYNC       ACTIVE  REVISION  PREVIEW  TARGET    MESSAGE
+api   Degraded  OutOfSync  green   578ef707  -        64dc3ce3  revision 64dc3ce3 failed (...); still serving 578ef707 from green
+shop  Healthy   Synced     blue    64dc3ce3  -        64dc3ce3  serving 64dc3ce3 from blue</code></pre>
+
+<h2>Phases</h2>
+<table>
+  <tr><th>Phase</th><th>Meaning</th></tr>
+  <tr><td><code>New</code></td><td>Never deployed.</td></tr>
+  <tr><td><code>Progressing</code></td><td>The preview is deploying or under analysis.</td></tr>
+  <tr><td><code>Paused</code></td><td>The preview is healthy and waits for promotion.</td></tr>
+  <tr><td><code>Healthy</code></td><td>The active slot serves the desired revision.</td></tr>
+  <tr><td><code>Degraded</code></td><td>The last rollout failed or the active slot is unhealthy.</td></tr>
+</table>
+
+<h2>REST API</h2>
+<table>
+  <tr><th>Method</th><th>Path</th><th>Auth</th></tr>
+  <tr><td>GET</td><td><code>/healthz</code></td><td>none</td></tr>
+  <tr><td>GET</td><td><code>/api/v1/apps</code>, <code>/api/v1/apps/{app}</code></td><td>none. Status as JSON.</td></tr>
+  <tr><td>POST</td><td><code>/api/v1/apps/{app}/{sync,promote,abort,rollback,retry}</code></td><td>Bearer token</td></tr>
+  <tr><td>POST</td><td><code>/api/v1/apps/{app}/webhook</code></td><td>per-app HMAC or token</td></tr>
+  <tr><td>POST</td><td><code>/api/v1/webhook</code></td><td>global HMAC or token</td></tr>
+  <tr><td>GET</td><td><code>/metrics</code></td><td>none. Prometheus format.</td></tr>
+</table>
+<pre><code>curl -s -X POST -H "Authorization: Bearer $DUOD_TOKEN" \
+  http://127.0.0.1:9800/api/v1/apps/shop/promote</code></pre>
+
+<h2>Prometheus metrics</h2>
+<p>Scrape <code>/metrics</code>. Useful series include <code>duod_app_phase</code>, <code>duod_app_synced</code>,
+<code>duod_app_active_healthy</code> and <code>duod_rollouts_in_flight</code>. Alert on <code>duod_app_active_healthy == 0</code> and on apps that stay out of sync.</p>

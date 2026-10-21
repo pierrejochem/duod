@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: help build build-arm64 test lint install validate-examples demo-prepare demo-up demo-watch demo-open demo-down demo-reset
+.PHONY: help build build-arm64 test lint install validate-examples docs docs-serve demo-prepare demo-up demo-watch demo-open demo-down demo-reset
 
 .DEFAULT_GOAL := help
 
@@ -49,3 +49,9 @@ demo-down: ## Demo: stop the demo
 
 demo-reset: ## Demo: stop and wipe demo state
 	cd demo && ./demo.sh reset
+
+docs: ## Build the documentation site into docs/
+	python3 docs-src/build.py
+
+docs-serve: ## Build docs for localhost:8000 and serve them
+	SITE_URL=http://localhost:8000 BASE_PATH= python3 docs-src/build.py && python3 -m http.server 8000 -d docs

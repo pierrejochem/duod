@@ -1,0 +1,47 @@
+<h1>Troubleshooting</h1>
+<p class="lead">Start with <code>duod get &lt;app&gt;</code> and <code>duod history &lt;app&gt;</code>. The message and the event log usually name the cause.
+Add <code>-log-format json</code> to <code>duod run</code> for structured logs.</p>
+
+<h2>Traefik Docker provider fails with "400 Bad Request"</h2>
+<p><strong>Cause:</strong> Docker Engine 29 rejects Docker API versions below 1.40, and older Traefik clients use them.
+<strong>Fix:</strong> upgrade Traefik to v3.6 or newer.</p>
+
+<h2>Rollout fails with a missing network message</h2>
+<p><strong>Cause:</strong> a routed service is not attached to <code>duod-edge</code>.
+<strong>Fix:</strong> add <code>duod-edge</code> to the service's <code>networks</code> and declare it as <code>external: true</code>.
+See <a href="{{BASE}}/compose-files/">Write a service</a>.</p>
+
+<h2>The preview never becomes healthy</h2>
+<ul>
+  <li>Check that <code>healthCheck.path</code> returns <code>expectStatus</code> when called through Traefik, not only inside the container.</li>
+  <li>Check that <code>routes[].port</code> is the container port and <code>routes[].replicas</code> equals <code>deploy.replicas</code>.</li>
+  <li>With <code>revisionHeader</code>, the app must return the <code>${BG_REVISION}</code> commit in that header.</li>
+  <li>Raise <code>progressDeadline</code> for slow images or start-up.</li>
+  <li>Confirm <code>traefik.probeURL</code> is reachable from duod, and that the <code>duod</code> entrypoint exists in Traefik's static config.</li>
+</ul>
+
+<h2>"Traefik did not load the new file" or confirm timeout</h2>
+<p>duod waits <code>confirmTimeout</code> for Traefik to serve the new generation, then restores the old file.
+Check that Traefik's file provider watches <code>traefik.dynamicDir</code>, that the directory is mounted in the Traefik container and that the provider uses <code>watch: true</code>.</p>
+
+<h2>The app is Degraded and does not retry</h2>
+<p>A failed revision is remembered in <code>failedRevision</code>. Push a fix as a new commit, or run <code>duod retry &lt;app&gt;</code>.</p>
+
+<h2>A rollout stays Paused</h2>
+<p>With <code>autoPromotionEnabled: false</code> duod waits. Run <code>duod promote &lt;app&gt;</code>, set <code>autoPromotionSeconds</code> or enable auto promotion.</p>
+
+<h2>A rollout is queued</h2>
+<p>The <code>RolloutQueued</code> event means <code>maxConcurrentRollouts</code> is reached. It starts when another rollout ends.</p>
+
+<h2>Apache: configtest fails</h2>
+<p>duod restores the previous include file and does not reload. Run <code>apachectl configtest</code> yourself to see the error, and check your <code>proxy.template</code>.</p>
+
+<h2>Git fetch errors</h2>
+<p><code>duod get &lt;app&gt;</code> shows <em>Git error</em>. Check that the user running duod can read the repository (SSH key or token), and that <code>source.revision</code> and <code>source.path</code> exist.</p>
+
+<h2>Webhook returns 401 or 403</h2>
+<p>The secret or signature header does not match. Use the same secret in the Git server and in <code>webhookSecret</code> (global) or <code>source.webhookSecret</code> (per app),
+and the endpoint that matches your Git server's header. See <a href="{{BASE}}/webhooks/">Webhooks</a>.</p>
+
+<h2>Still stuck?</h2>
+<p>Open an issue on <a href="{{REPO}}/issues">GitHub</a> with the output of <code>duod get &lt;app&gt;</code>, <code>duod history &lt;app&gt;</code> and the duod logs.</p>

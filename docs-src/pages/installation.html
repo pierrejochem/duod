@@ -1,0 +1,68 @@
+<h1>Install duod</h1>
+<p class="lead">This page installs duod and Traefik on one Docker host and starts the first rollout.</p>
+
+<h2>Requirements</h2>
+<table>
+  <tr><th>Needed for</th><th>Requirement</th></tr>
+  <tr><td>Running duod</td><td>Docker Engine with Compose v2, and <code>git</code> on the host (or in the duod container)</td></tr>
+  <tr><td>Traffic switch</td><td>Traefik <strong>v3.6 or newer</strong> when the Docker Engine is 29 or newer. Older Traefik clients speak a Docker API version that Engine 29 rejects (minimum 1.40), so the Docker provider fails with a 400.</td></tr>
+  <tr><td>Building from source</td><td>Go 1.24 (see <code>go.mod</code>)</td></tr>
+</table>
+
+<h2>1. Get the binary</h2>
+<h3>deb or rpm package</h3>
+<p>Download the package for your architecture (amd64 or arm64) from the <a href="{{REPO}}/releases">releases page</a>.
+Packages install the binary, the systemd unit and the license.</p>
+<pre><code># Debian, Ubuntu
+sudo apt install ./duod_&lt;version&gt;_linux_amd64.deb
+
+# Fedora, RHEL, openSUSE
+sudo rpm -i duod_&lt;version&gt;_linux_amd64.rpm</code></pre>
+
+<h3>Tarball</h3>
+<pre><code>tar xzf duod_&lt;version&gt;_linux_amd64.tar.gz
+sudo install -m 0755 duod /usr/local/bin/duod
+duod version</code></pre>
+
+<h3>From source</h3>
+<pre><code>git clone {{REPO}}.git &amp;&amp; cd duod
+make build &amp;&amp; sudo make install</code></pre>
+
+<h2>2. Start Traefik</h2>
+<p>Traefik's static config needs three things:</p>
+<ul>
+  <li>the file provider, watching the directory duod writes to,</li>
+  <li>a <code>duod</code> entrypoint that is <strong>not</strong> published publicly, and</li>
+  <li>the <code>duod-edge</code> Docker network.</li>
+</ul>
+<p><a href="{{REPO}}/blob/main/examples/traefik/compose.yaml"><code>examples/traefik/compose.yaml</code></a> has all three, plus Let's Encrypt.</p>
+<pre><code>sudo mkdir -p /etc/duod/traefik
+docker network create duod-edge
+docker compose -p traefik -f examples/traefik/compose.yaml up -d</code></pre>
+<p>Middlewares you define yourself (in <code>examples/traefik/shared.yaml</code> or through the Docker provider)
+can be referenced from routes, as in <code>secure-headers@file</code>.</p>
+
+<h2>3. Configure duod</h2>
+<pre><code>sudo cp examples/duod.yaml /etc/duod/duod.yaml        # edit apps, hosts, repo
+echo "DUOD_TOKEN=$(openssl rand -hex 32)"          | sudo tee    /etc/duod/env
+echo "DUOD_WEBHOOK_SECRET=$(openssl rand -hex 32)" | sudo tee -a /etc/duod/env
+sudo duod validate -config /etc/duod/duod.yaml        # prints each app's Traefik file</code></pre>
+<p><code>duod validate</code> checks the file and prints the Traefik config duod would write for each app.
+See the <a href="{{BASE}}/configuration/">configuration reference</a> for every option.</p>
+
+<h2>4. Start the service</h2>
+<pre><code>sudo systemctl enable --now duod
+sudo systemctl status duod
+export DUOD_SERVER=http://127.0.0.1:9800 DUOD_TOKEN=...
+duod list</code></pre>
+
+<h2>Run duod in Docker instead</h2>
+<p>See <a href="{{REPO}}/tree/main/examples/duod-in-docker"><code>examples/duod-in-docker</code></a>.
+Set <code>traefik.probeURL: http://traefik:8099</code>, because duod then reaches Traefik by container name.</p>
+
+<h2>Next steps</h2>
+<ol>
+  <li><a href="{{BASE}}/compose-files/">Write the compose file</a> for your first service.</li>
+  <li>Push it to the GitOps repo under <code>apps/&lt;name&gt;/</code>.</li>
+  <li>Add a <a href="{{BASE}}/webhooks/">webhook</a>, or wait for the next poll (default one minute).</li>
+</ol>

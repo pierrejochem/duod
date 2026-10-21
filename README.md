@@ -26,6 +26,8 @@ same time. Apache on the host is still supported as an alternative switch.
                                 └─────────────────────────────────────────────────────────────────┘
 ```
 
+> **Documentation:** <https://pierrejochem.github.io/duod/> (user manual, configuration reference, troubleshooting).
+>
 > **Live demo:** [`demo/`](demo/) starts Portus (registry), Traefik, duod, three
 > demo services and a live dashboard with one command, and includes a 15-minute
 > presenter run-book.

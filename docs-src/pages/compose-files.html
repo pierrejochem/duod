@@ -1,0 +1,58 @@
+<h1>Write a service's compose file</h1>
+<p class="lead">duod runs the same compose file twice, as the projects <code>&lt;app&gt;-blue</code> and <code>&lt;app&gt;-green</code>.
+It injects three variables: <code>BG_APP</code>, <code>BG_SLOT</code> (<code>blue</code> or <code>green</code>) and <code>BG_REVISION</code> (the Git commit).</p>
+
+<h2>Example</h2>
+<pre><code># apps/shop/compose.yaml in the GitOps repo
+services:
+  web:
+    image: ghcr.io/acme/shop:1.8.0          # bump this line to release
+    restart: unless-stopped
+    deploy:
+      replicas: 2                           # = routes[].replicas in duod.yaml
+    environment:
+      APP_REVISION: ${BG_REVISION}          # echo as X-Revision (healthCheck.revisionHeader)
+      APP_SLOT: ${BG_SLOT}
+      DATABASE_URL: postgres://shop@db:5432/shop
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 5s
+      retries: 3
+    networks: [default, duod-edge, shared]
+
+  worker:                                   # not routed -> no duod-edge needed
+    image: ghcr.io/acme/shop:1.8.0
+    command: ["bin/worker"]
+    networks: [shared]
+
+networks:
+  duod-edge:
+    external: true
+  shared:
+    external: true            # created by the shared-infra project (db, redis)
+    name: shop-shared</code></pre>
+<p>Full files: <a href="{{REPO}}/tree/main/examples/deploy-repo"><code>examples/deploy-repo</code></a>.</p>
+
+<h2>Rules</h2>
+<ul>
+  <li><strong>Join <code>duod-edge</code>.</strong> Attach every <em>routed</em> service to the external network <code>duod-edge</code>. Traefik reaches it as <code>&lt;app&gt;-&lt;color&gt;-&lt;service&gt;-&lt;n&gt;:&lt;port&gt;</code>.</li>
+  <li><strong>No <code>ports</code> and no <code>container_name</code>.</strong> Both colors run side by side, so fixed ports and names would clash.</li>
+  <li><strong>Match replicas.</strong> Set <code>routes[].replicas</code> to the service's <code>deploy.replicas</code>.</li>
+  <li><strong>Add a health endpoint.</strong> Expose the path that <code>healthCheck.path</code> probes, and return <code>200</code> only when the app is ready.</li>
+</ul>
+
+<h2>Stateful services stay outside the slot</h2>
+<p>Run databases, Redis and queues in a separate Compose project. Both colors use them during the switch, so they must not be duplicated or restarted with a slot.</p>
+
+<h2>Database migrations</h2>
+<p>Keep migrations backward-compatible: expand, then contract. The old color must keep working against the new schema until it is scaled down, and also if you roll back.</p>
+
+<h2>Background workers</h2>
+<p>Workers inside a slot run twice while both colors are up. Make jobs idempotent, or move singleton workers into the shared project.</p>
+
+<h2>Release by editing Git</h2>
+<p>A release is a commit that changes the compose file, usually the image tag. Build images in CI and reference them by tag or digest.
+duod pulls images during the rollout when <code>source.pull</code> is <code>always</code>.</p>
+<pre><code>git commit -am "shop: 1.8.1"
+git push</code></pre>
+<p>Next: <a href="{{BASE}}/webhooks/">trigger rollouts from a webhook</a>.</p>

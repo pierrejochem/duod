@@ -1,0 +1,40 @@
+<h1>duod vs Argo CD and Argo Rollouts</h1>
+<p class="lead">duod copies the vocabulary and the guarantees of Argo CD and Argo Rollouts <code>blueGreen</code>, but runs on one Docker host.
+If you know Argo, the table below tells you what to use in duod.</p>
+
+<h2>Concept mapping</h2>
+<table>
+  <tr><th>Argo CD / Rollouts</th><th>duod</th></tr>
+  <tr><td>Application <code>source</code></td><td><code>source.repoURL / revision / path</code></td></tr>
+  <tr><td>Sync / OutOfSync</td><td>Git target revision vs. active revision</td></tr>
+  <tr><td>ReplicaSets (stable / new)</td><td>Compose projects <code>&lt;app&gt;-blue</code> and <code>&lt;app&gt;-green</code></td></tr>
+  <tr><td>active Service</td><td>Traefik router to <code>duod-&lt;app&gt;-&lt;route&gt;-&lt;color&gt;</code> service</td></tr>
+  <tr><td>preview Service</td><td><code>previewRule</code> router, plus private probe routers</td></tr>
+  <tr><td>prePromotionAnalysis</td><td><code>healthCheck</code> through Traefik (n consecutive successes)</td></tr>
+  <tr><td><code>autoPromotionEnabled/Seconds</code></td><td>same fields</td></tr>
+  <tr><td>postPromotionAnalysis</td><td><code>postPromotionAnalysis</code>, with automatic rollback</td></tr>
+  <tr><td><code>scaleDownDelaySeconds</code></td><td><code>scaleDownDelay</code> (the old slot is stopped, not removed)</td></tr>
+  <tr><td><code>kubectl argo rollouts promote / abort / undo</code></td><td><code>duod promote / abort / rollback</code></td></tr>
+  <tr><td>self-heal</td><td>restart the active slot, revert manual edits of the proxy config</td></tr>
+</table>
+
+<h2>What is different</h2>
+<ul>
+  <li><strong>No cluster.</strong> One operator controls one Docker host. For several hosts, run one duod per host.</li>
+  <li><strong>Blue/green only.</strong> There is no canary strategy yet. Traefik <code>weighted</code> services could add it later.</li>
+  <li><strong>Health through the proxy.</strong> The analysis uses Traefik's private entrypoint, so it tests the real network path.</li>
+  <li><strong>Plain Compose files.</strong> There are no new resource types. Your compose file is the deployment manifest.</li>
+</ul>
+
+<h2>When to choose duod</h2>
+<p>Choose duod when your services run on a VM or bare-metal Docker host and you want GitOps, zero-downtime releases and one-command rollbacks without Kubernetes.
+Choose Argo CD and Argo Rollouts when you already run Kubernetes.</p>
+
+<h2>Limitations</h2>
+<ul>
+  <li>One Docker host per operator instance.</li>
+  <li>Traffic switching is all at once (blue/green).</li>
+  <li>A path-scoped revision only reacts to changes inside <code>source.path</code>.</li>
+  <li>Images are pulled during the rollout (<code>pull: always</code>). Build them in CI and reference them by tag or digest in Git.</li>
+  <li>Requires Traefik v3 (the <code>Header()</code> rule syntax and the <code>noop@internal</code> service). Use v3.6 or newer with Docker Engine 29+.</li>
+</ul>

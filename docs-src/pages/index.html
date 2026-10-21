@@ -1,0 +1,61 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="{{BASE}}/assets/duod-logo-dark.svg">
+  <img class="hero" src="{{BASE}}/assets/duod-logo.svg" alt="duod logo: two slots, one daemon" width="420" height="128">
+</picture>
+<h1>GitOps blue/green deployments for Docker Compose</h1>
+<p class="lead"><strong>duod</strong> (two slots, one daemon) is a small, open-source Go operator that brings the
+<a href="https://argo-cd.readthedocs.io/">Argo CD</a> and
+<a href="https://argoproj.github.io/rollouts/">Argo Rollouts</a> <code>blueGreen</code> workflow to a plain Docker host.
+You do not need Kubernetes.</p>
+
+<ul>
+  <li><strong>Git</strong> is the source of truth for every service.</li>
+  <li><strong>Docker Compose</strong> runs the two colors, blue and green, of every service.</li>
+  <li><strong>Traefik</strong> in Docker switches the traffic in one atomic file write. Apache on the host works as an alternative.</li>
+</ul>
+
+<div class="cta">
+  <a href="{{BASE}}/getting-started/">Try the demo</a>
+  <a href="{{BASE}}/installation/">Install duod</a>
+  <a href="{{BASE}}/concepts/">How it works</a>
+</div>
+
+<h2>Why duod</h2>
+<div class="cards">
+  <div class="card"><h3>Zero-downtime releases</h3>
+    <p>The new version starts in the idle slot and is health-checked through Traefik, on the same network path real traffic uses. Only then does traffic switch.</p></div>
+  <div class="card"><h3>Independent services</h3>
+    <p>Each service has its own Git folder, state machine and Traefik file. A failing <code>api</code> release never blocks or rolls back <code>shop</code>.</p></div>
+  <div class="card"><h3>Parallel rollouts</h3>
+    <p>One push can roll out several services at once. <code>maxConcurrentRollouts</code> caps the load.</p></div>
+  <div class="card"><h3>Safe by default</h3>
+    <p>Failed health checks never reach users. A bad release stays in preview, and <code>duod rollback</code> returns to the previous slot without a Git change.</p></div>
+  <div class="card"><h3>Monorepo-aware</h3>
+    <p>A service redeploys only when a commit touches its own <code>source.path</code>.</p></div>
+  <div class="card"><h3>One small binary</h3>
+    <p>A static Go binary with a CLI, REST API, webhooks and Prometheus metrics. deb, rpm and tarball packages for amd64 and arm64.</p></div>
+</div>
+
+<h2>The architecture in one picture</h2>
+<pre>                                ┌──────────────────────── Docker host ────────────────────────────┐
+ GitOps repo        webhook /   │         ┌─► compose shop-blue   ─┐                              │
+  apps/shop/  ───►  poll  ──► duod ───────┼─► compose shop-green  ─┤   network duod-edge          │
+  apps/api/                     │  │      ├─► compose api-blue    ─┼──────────────┐               │
+  apps/admin/                   │  │      └─► compose api-green   ─┘              │               │
+                                │  │                                              ▼               │
+                                │  └─ writes /etc/duod/traefik/&lt;app&gt;.yaml ──► Traefik :443 ◄── clients
+                                │     probes Traefik :8099 (private) ◄────────────┘               │
+                                └─────────────────────────────────────────────────────────────────┘</pre>
+
+<h2>Where to start</h2>
+<ol>
+  <li><a href="{{BASE}}/getting-started/">Run the demo</a> to see a rollout, a rejected broken release and a rollback.</li>
+  <li><a href="{{BASE}}/installation/">Install duod</a> on a Docker host with Traefik.</li>
+  <li><a href="{{BASE}}/compose-files/">Write your service's compose file</a> and <a href="{{BASE}}/configuration/">configure the app</a>.</li>
+  <li><a href="{{BASE}}/webhooks/">Add a webhook</a> so every push deploys.</li>
+</ol>
+
+<h2>Verified under load</h2>
+<p>duod was tested end to end against a real Traefik (3.5 and 3.6). Two services rolled out concurrently under continuous load
+(about 7,400 requests each, 0 errors). A broken <code>api</code> release was rejected while <code>shop</code> shipped at the same time,
+with 0 failed requests on either host.</p>

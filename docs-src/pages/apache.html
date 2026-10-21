@@ -1,0 +1,41 @@
+<h1>Apache instead of Traefik</h1>
+<p class="lead">duod can switch traffic with Apache on the host. Use it when Apache already terminates TLS and you do not want to add Traefik.</p>
+
+<h2>How it works</h2>
+<ul>
+  <li>Each slot publishes the app on its own loopback port, <code>127.0.0.1:${BG_PORT}</code>.</li>
+  <li>duod rewrites an include file that it owns (<code>proxy.configFile</code>).</li>
+  <li>duod runs <code>apachectl configtest</code>. If it fails, the old file is restored.</li>
+  <li>duod then runs <code>apachectl graceful</code>.</li>
+</ul>
+<p>Apache apps are serialized on the configtest and reload step, because Apache validates its whole configuration at once.
+Their deploys and analyses still run in parallel.</p>
+
+<h2>Configuration</h2>
+<pre><code>apache:
+  configTest: ["apachectl", "configtest"]
+  reload: ["apachectl", "graceful"]
+
+apps:
+  - name: shop
+    source: {repoURL: git@github.com:acme/deploy.git, path: apps/shop}
+    slots:
+      blue:  {port: 18081}
+      green: {port: 18082}
+    healthCheck: {path: /health}
+    proxy:
+      type: apache
+      configFile: /etc/apache2/duod/shop.conf</code></pre>
+<p>Ports must be unique across all apps and colors. Include the file from your vhost with <code>Include</code>.</p>
+
+<h2>Default template</h2>
+<p>If you do not set <code>proxy.template</code>, duod routes all traffic to the active slot and exposes the preview under <code>/_preview/</code> for smoke tests:</p>
+<pre><code>ProxyPreserveHost On
+ProxyPass        /_preview/ http://127.0.0.1:{{.PreviewOrActivePort}}/
+ProxyPassReverse /_preview/ http://127.0.0.1:{{.PreviewOrActivePort}}/
+ProxyPass        / http://127.0.0.1:{{.ActivePort}}/
+ProxyPassReverse / http://127.0.0.1:{{.ActivePort}}/</code></pre>
+
+<h2>Examples</h2>
+<p>See <a href="{{REPO}}/blob/main/examples/duod-apache.yaml"><code>examples/duod-apache.yaml</code></a> and
+<a href="{{REPO}}/tree/main/examples/apache"><code>examples/apache</code></a>.</p>

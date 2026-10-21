@@ -1,0 +1,61 @@
+<h1>How duod works</h1>
+<p class="lead">duod runs every service in two slots, blue and green. One slot serves traffic. The other holds the next version until it is healthy.</p>
+
+<h2>Core concepts</h2>
+<dl>
+  <dt><strong>App</strong></dt>
+  <dd>One independently deployed service. It has its own Git folder (<code>source.path</code>), its own Compose projects, its own state and its own Traefik file.</dd>
+  <dt><strong>Slot</strong></dt>
+  <dd>One color of an app. duod runs the same compose file twice, as the projects <code>&lt;app&gt;-blue</code> and <code>&lt;app&gt;-green</code>.</dd>
+  <dt><strong>Active, preview, previous</strong></dt>
+  <dd>The active slot serves public traffic. The preview slot holds the new version under test. The previous slot is the stopped old version kept for rollback.</dd>
+  <dt><strong>Route</strong></dt>
+  <dd>One compose service published through Traefik. An app can have several routes that switch together.</dd>
+</dl>
+
+<h2>Rollout lifecycle</h2>
+<ol>
+  <li><strong>Detect.</strong> A webhook or poll fetches Git and resolves the newest commit that touched <code>source.path</code>.</li>
+  <li><strong>Preview.</strong> The commit is extracted into the idle slot's own directory, so each slot has an immutable checkout of its revision. Whatever still runs in that slot is removed, then <code>docker compose up -d</code> starts the new version as project <code>&lt;app&gt;-&lt;color&gt;</code>.</li>
+  <li><strong>Wiring check.</strong> Every routed container (<code>&lt;app&gt;-&lt;color&gt;-&lt;service&gt;-&lt;n&gt;</code>) must exist and be attached to <code>duod-edge</code>. A missing <code>networks:</code> entry fails immediately with a clear message, not with a health-check timeout.</li>
+  <li><strong>Pre-promotion analysis.</strong> duod adds probe routers for the new slot on Traefik's private <code>duod</code> entrypoint and checks <code>healthCheck.path</code> <em>through Traefik</em>. That is the same network path real traffic takes. With <code>revisionHeader</code>, the app must also echo the new commit SHA.</li>
+  <li><strong>Paused or promoted.</strong> The rollout waits for <code>duod promote</code>, or for <code>autoPromotionSeconds</code>. With <code>autoPromotionEnabled</code> it promotes at once.</li>
+  <li><strong>Switch.</strong> The app's Traefik file is rewritten atomically. Every generated file carries a generation hash that Traefik returns in <code>X-Duod-Generation</code>. duod waits until Traefik serves the new generation before it reports the promotion. If Traefik does not load it within <code>confirmTimeout</code>, the old file is put back. Open connections to the old slot finish normally.</li>
+  <li><strong>Post-promotion analysis (optional).</strong> The public URL is watched. On failure duod switches back automatically.</li>
+  <li><strong>Scale down.</strong> After <code>scaleDownDelay</code> the old slot is stopped but kept, so <code>duod rollback</code> only has to restart it, health-check it and switch.</li>
+</ol>
+
+<h2>Phases and sync status</h2>
+<p><code>duod list</code> shows a phase and a sync status per app, like Argo CD.
+<em>Synced</em> means the Git target revision equals the active revision. <em>OutOfSync</em> means they differ.
+<code>Healthy</code> means the active slot serves the target. <code>Degraded</code> means the newest revision failed and the previous one still serves.
+<code>Paused</code> means a healthy preview waits for promotion.</p>
+
+<h2>Failed revisions</h2>
+<p>A failed or aborted revision is recorded in <code>failedRevision</code> and is not retried on every tick.
+Push a fix (a new commit) or run <code>duod retry &lt;app&gt;</code>. A new commit that arrives while a rollout is paused replaces the preview.</p>
+
+<h2>Parallel, independent rollouts</h2>
+<ul>
+  <li><strong>One app per service.</strong> A failing rollout of <code>api</code> never blocks, delays or rolls back <code>shop</code>.</li>
+  <li><strong>Concurrent rollouts.</strong> Every app runs its own reconcile loop, so a push that changes three services rolls all three out at the same time. <code>maxConcurrentRollouts</code> caps how many deploy at once. The others are queued with a <code>RolloutQueued</code> event.</li>
+  <li><strong>Monorepo-aware.</strong> An app's target revision is the newest commit that touched <em>its</em> <code>source.path</code>.</li>
+  <li><strong>Coupled services.</strong> Services that must switch together, such as a frontend and its BFF, can be several <code>routes</code> of one app. They share one Traefik file and change color in a single atomic write.</li>
+</ul>
+
+<h2>Self-heal and state</h2>
+<p>With <code>selfHeal</code> (on by default) duod restarts the active slot and reverts manual edits of the proxy config.
+State is stored in <code>/var/lib/duod/state/&lt;app&gt;.json</code> and survives restarts.
+If duod dies in the middle of an analysis, the rollout is redone. A paused preview stays paused.</p>
+
+<h2>Code layout</h2>
+<pre><code>cmd/duod             CLI + operator entry point
+internal/controller  per-app reconcile loops, blue/green state machine, rollout limiter
+internal/proxy       traffic-switch interface
+internal/traefik     dynamic file per app, probe routers, generation confirm, network check
+internal/apache      include file, configtest, graceful reload
+internal/gitsrc      git mirror, path-scoped revision, per-slot checkout
+internal/compose     docker compose per slot
+internal/health      pre/post-promotion analysis
+internal/api         REST, webhooks, metrics
+internal/state       persisted state</code></pre>

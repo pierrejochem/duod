@@ -1,0 +1,42 @@
+<h1>Webhooks and Git</h1>
+<p class="lead">duod polls Git every <code>pollInterval</code> (default one minute). A push webhook makes rollouts start within seconds.</p>
+
+<h2>Endpoints</h2>
+<table>
+  <tr><th>Endpoint</th><th>Refreshes</th><th>Verified with</th></tr>
+  <tr><td><code>POST /api/v1/webhook</code></td><td>all apps</td><td><code>webhookSecret</code></td></tr>
+  <tr><td><code>POST /api/v1/apps/&lt;app&gt;/webhook</code></td><td>one app</td><td><code>source.webhookSecret</code></td></tr>
+</table>
+<p>Only apps whose <code>source.path</code> changed roll out. One webhook on a monorepo is enough.</p>
+
+<h2>Supported Git servers</h2>
+<table>
+  <tr><th>Server</th><th>Header duod checks</th></tr>
+  <tr><td>GitHub</td><td><code>X-Hub-Signature-256</code> (HMAC-SHA256)</td></tr>
+  <tr><td>Gitea, Forgejo</td><td><code>X-Gitea-Signature</code></td></tr>
+  <tr><td>GitLab</td><td><code>X-Gitlab-Token</code></td></tr>
+</table>
+<p>Use the same secret as <code>webhookSecret</code> when you create the webhook in your Git server.
+The webhook only triggers a fetch, so duod never trusts the payload.</p>
+
+<h2>Set up a GitHub webhook</h2>
+<ol>
+  <li>Open your GitOps repository, then <em>Settings</em>, <em>Webhooks</em>, <em>Add webhook</em>.</li>
+  <li>Payload URL: <code>https://admin.example.com/duod-hook/api/v1/webhook</code> (see below).</li>
+  <li>Content type: <code>application/json</code>. Secret: the value of <code>DUOD_WEBHOOK_SECRET</code>.</li>
+  <li>Event: <em>Just the push event</em>.</li>
+</ol>
+
+<h2>Expose the endpoint through Traefik</h2>
+<p>duod listens on loopback by default. Publish only the webhook path, for example with a router for <code>PathPrefix(`/duod-hook`)</code> on your admin host,
+a <code>stripPrefix</code> middleware, and a service pointing at <code>http://&lt;host&gt;:9800</code>.
+Set <code>listen</code> so that Traefik can reach it, and keep <code>apiToken</code> set.</p>
+<div class="warn"><p>Do not expose the whole API to the internet. Mutating calls need the Bearer token, but only the webhook path has to be public.</p></div>
+
+<h2>Monorepo behavior</h2>
+<p>An app's target revision is the newest commit that touched its own <code>source.path</code>. A commit to <code>apps/api</code> does not redeploy <code>apps/shop</code>,
+even though both track <code>main</code>.
+Files shared between services and located outside their folders do not trigger a rollout.</p>
+
+<h2>Force a sync</h2>
+<pre><code>duod sync shop</code></pre>

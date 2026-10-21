@@ -1,0 +1,38 @@
+<h1>Getting started: the five-minute demo</h1>
+<p class="lead">The demo starts a private registry (Portus), Traefik, duod, three demo services and a live dashboard with one command.
+Use it to see blue/green rollouts before you install duod on a real host.</p>
+
+<h2>Requirements</h2>
+<p>You need Docker with Compose v2, <code>git</code>, <code>openssl</code> and <code>curl</code>.
+You do not need Go, because duod is built inside Docker.</p>
+
+<h2>Start the demo</h2>
+<p>Clone the <a href="{{REPO}}">repository</a> and run:</p>
+<pre><code>make demo-up      # registry, Traefik, duod, 3 services, dashboard
+make demo-open    # dashboard, shop and Portus in your browser</code></pre>
+<p>The dashboard is at <code>http://dashboard.localhost</code>. Run <code>make help</code> for every target.</p>
+
+<h2>Roll out a new version</h2>
+<pre><code>cd demo
+./demo.sh release shop 1.1.0</code></pre>
+<p>The script builds the image, pushes it to the registry and bumps the tag in the demo GitOps repo.
+duod picks up the commit. On the dashboard you see the idle slot start, pass its health check, wait for promotion and then take the traffic.</p>
+
+<h2>See a broken release rejected</h2>
+<pre><code>./demo.sh release api 1.1.0 --broken</code></pre>
+<p>The new version fails its health check in the preview slot. The old slot keeps serving, so users see no error.
+The app shows phase <code>Degraded</code> until you push a fix or run <code>duod retry api</code>.</p>
+
+<h2>Promote, abort and roll back</h2>
+<p>Services with <code>autoPromotionEnabled: false</code> pause after a healthy preview. Use the <a href="{{BASE}}/cli/">CLI</a>:</p>
+<pre><code>duod promote shop    # switch traffic to the preview
+duod abort shop      # discard the paused preview
+duod rollback shop   # back to the previous slot</code></pre>
+
+<h2>Stop the demo</h2>
+<pre><code>make demo-down     # stop
+make demo-reset    # wipe all demo state</code></pre>
+
+<div class="note"><p>The demo folder also contains a 15-minute presenter run-book. See <a href="{{REPO}}/tree/main/demo"><code>demo/</code></a> on GitHub.</p></div>
+
+<p>Next: <a href="{{BASE}}/installation/">install duod on your own host</a>.</p>

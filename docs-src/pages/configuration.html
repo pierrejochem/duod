@@ -1,0 +1,124 @@
+<h1>Configuration reference: duod.yaml</h1>
+<p class="lead">duod reads one YAML file, by default <code>/etc/duod/duod.yaml</code>. Run <code>duod validate -config &lt;file&gt;</code> to check it.
+Values like <code>${DUOD_TOKEN}</code> are replaced from the environment where noted.</p>
+
+<h2>Minimal example</h2>
+<pre><code>apiToken: ${DUOD_TOKEN}
+apps:
+  - name: shop
+    source:
+      repoURL: git@github.com:acme/deploy.git
+      path: apps/shop
+    healthCheck: {path: /health}
+    proxy:
+      routes:
+        - name: web
+          port: 3000
+          rule: Host(`shop.example.com`)
+          tls: {certResolver: le}</code></pre>
+<p>A full example with three apps is in <a href="{{REPO}}/blob/main/examples/duod.yaml"><code>examples/duod.yaml</code></a>.
+YAML anchors (<code>&amp;health</code>, <code>&lt;&lt;: *source</code>) keep repeated settings short.</p>
+
+<h2>Global settings</h2>
+<table>
+  <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>listen</code></td><td><code>127.0.0.1:9800</code></td><td>Address of the REST API, webhook and metrics server.</td></tr>
+  <tr><td><code>stateDir</code></td><td><code>/var/lib/duod</code></td><td>Persisted rollout state and per-slot checkouts.</td></tr>
+  <tr><td><code>apiToken</code></td><td>empty</td><td>Bearer token for mutating API calls. Supports <code>${ENV}</code>. If empty, keep <code>listen</code> on loopback.</td></tr>
+  <tr><td><code>reconcileInterval</code></td><td><code>5s</code></td><td>How often each app's state machine is evaluated.</td></tr>
+  <tr><td><code>docker</code></td><td><code>["docker","compose"]</code></td><td>Command prefix used to call Docker Compose.</td></tr>
+  <tr><td><code>maxConcurrentRollouts</code></td><td><code>0</code> (unlimited)</td><td>How many apps may deploy at once. Others are queued.</td></tr>
+  <tr><td><code>webhookSecret</code></td><td>empty</td><td>Secret for the global webhook <code>/api/v1/webhook</code>. Supports <code>${ENV}</code>.</td></tr>
+</table>
+
+<h2>traefik</h2>
+<table>
+  <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>dynamicDir</code></td><td><code>/etc/duod/traefik</code></td><td>Directory watched by Traefik's file provider. duod writes one <code>&lt;app&gt;.yaml</code> per app.</td></tr>
+  <tr><td><code>network</code></td><td><code>duod-edge</code></td><td>Docker network shared by Traefik and all slots. duod creates it if missing.</td></tr>
+  <tr><td><code>probeURL</code></td><td><code>http://127.0.0.1:8099</code></td><td>Traefik's private entrypoint for health checks and switch confirmation. Use <code>http://traefik:8099</code> when duod runs in Docker.</td></tr>
+  <tr><td><code>probeEntryPoint</code></td><td><code>duod</code></td><td>Name of that entrypoint in Traefik's static config.</td></tr>
+  <tr><td><code>confirmTimeout</code></td><td><code>30s</code></td><td>Maximum wait until Traefik serves a new file. On timeout the old file is restored.</td></tr>
+</table>
+
+<h2>apps[].source</h2>
+<p>The Git location of the desired state, like an Argo CD <code>source</code>.</p>
+<table>
+  <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>repoURL</code></td><td>required</td><td>Git repository. Supports <code>${ENV}</code>.</td></tr>
+  <tr><td><code>revision</code></td><td><code>main</code></td><td>Branch, tag or commit to track.</td></tr>
+  <tr><td><code>path</code></td><td><code>.</code></td><td>Directory inside the repo. Must not contain <code>..</code>. Only commits touching it trigger a rollout.</td></tr>
+  <tr><td><code>composeFile</code></td><td><code>compose.yaml</code></td><td>Compose file inside <code>path</code>.</td></tr>
+  <tr><td><code>pollInterval</code></td><td><code>1m</code></td><td>How often Git is polled when no webhook arrives.</td></tr>
+  <tr><td><code>pull</code></td><td><code>missing</code></td><td>Compose pull policy: <code>always</code>, <code>missing</code> or <code>never</code>.</td></tr>
+  <tr><td><code>webhookSecret</code></td><td>empty</td><td>Secret for this app's webhook. Supports <code>${ENV}</code>.</td></tr>
+</table>
+
+<h2>apps[].healthCheck</h2>
+<p>The pre-promotion analysis against the preview slot, run through Traefik.</p>
+<table>
+  <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>path</code></td><td><code>/</code></td><td>URL path to probe on the first route.</td></tr>
+  <tr><td><code>expectStatus</code></td><td><code>200</code></td><td>Required HTTP status.</td></tr>
+  <tr><td><code>interval</code></td><td><code>2s</code></td><td>Time between probes.</td></tr>
+  <tr><td><code>timeout</code></td><td><code>2s</code></td><td>Timeout of one probe.</td></tr>
+  <tr><td><code>successThreshold</code></td><td><code>3</code></td><td>Consecutive successes needed.</td></tr>
+  <tr><td><code>failureThreshold</code></td><td><code>3</code></td><td>Failures that fail the analysis.</td></tr>
+  <tr><td><code>progressDeadline</code></td><td><code>5m</code></td><td>Maximum time for the whole preview to become healthy.</td></tr>
+  <tr><td><code>revisionHeader</code></td><td>empty</td><td>Header (for example <code>X-Revision</code>) in which the app must echo the deployed commit. duod passes the commit as <code>${BG_REVISION}</code>.</td></tr>
+  <tr><td><code>host</code></td><td><code>127.0.0.1</code></td><td>Host for Apache probes.</td></tr>
+</table>
+
+<h2>apps[].strategy</h2>
+<p>Mirrors the Argo Rollouts <code>blueGreen</code> strategy.</p>
+<table>
+  <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>autoPromotionEnabled</code></td><td><code>false</code></td><td><code>true</code>: promote as soon as the preview is healthy. <code>false</code>: pause for <code>duod promote</code>.</td></tr>
+  <tr><td><code>autoPromotionSeconds</code></td><td><code>0</code></td><td>Promote automatically after this many seconds in <code>Paused</code>.</td></tr>
+  <tr><td><code>scaleDownDelay</code></td><td><code>10m</code></td><td>How long the old slot keeps running after a promotion. It is then stopped, not removed.</td></tr>
+  <tr><td><code>selfHeal</code></td><td><code>true</code></td><td>Restart the active slot and revert manual edits of the proxy config.</td></tr>
+  <tr><td><code>postPromotionAnalysis</code></td><td>off</td><td>Optional. See below.</td></tr>
+</table>
+
+<h3>postPromotionAnalysis</h3>
+<p>Watches the public URL after the switch and rolls back automatically on failure.</p>
+<table>
+  <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>url</code></td><td>required</td><td>Public URL to watch.</td></tr>
+  <tr><td><code>duration</code></td><td><code>1m</code></td><td>How long to watch.</td></tr>
+  <tr><td><code>interval</code></td><td><code>5s</code></td><td>Time between probes.</td></tr>
+  <tr><td><code>failureThreshold</code></td><td><code>3</code></td><td>Failures that trigger the rollback.</td></tr>
+  <tr><td><code>expectStatus</code></td><td><code>200</code></td><td>Required HTTP status.</td></tr>
+</table>
+
+<h2>apps[].proxy (Traefik)</h2>
+<p><code>proxy.type</code> is <code>traefik</code> or <code>apache</code>. It defaults to <code>traefik</code> when <code>routes</code> are set and to <code>apache</code> otherwise.
+All routes of an app switch in one atomic file write.</p>
+<table>
+  <tr><th>Route key</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>name</code></td><td>required</td><td>Route id, lowercase letters, digits and <code>-</code>, up to 31 characters.</td></tr>
+  <tr><td><code>service</code></td><td>same as <code>name</code></td><td>Compose service to publish.</td></tr>
+  <tr><td><code>port</code></td><td>required</td><td>Container port.</td></tr>
+  <tr><td><code>replicas</code></td><td><code>1</code></td><td>Compose replicas (1 to 50). Must equal the service's <code>deploy.replicas</code>.</td></tr>
+  <tr><td><code>scheme</code></td><td><code>http</code></td><td><code>http</code>, <code>https</code> or <code>h2c</code>.</td></tr>
+  <tr><td><code>rule</code></td><td>required</td><td>Traefik router rule, for example <code>Host(`app.example.com`)</code>.</td></tr>
+  <tr><td><code>entryPoints</code></td><td><code>[websecure]</code></td><td>Traefik entrypoints for public traffic.</td></tr>
+  <tr><td><code>middlewares</code></td><td>none</td><td>Traefik middlewares, for example <code>secure-headers@file</code>.</td></tr>
+  <tr><td><code>tls</code></td><td>none</td><td>Traefik router TLS block, for example <code>{certResolver: le}</code>.</td></tr>
+  <tr><td><code>priority</code></td><td>Traefik default</td><td>Router priority.</td></tr>
+  <tr><td><code>previewRule</code></td><td>none</td><td>Optional rule that exposes the preview slot, for example <code>Host(`preview.shop.example.com`)</code>.</td></tr>
+  <tr><td><code>healthPath</code></td><td>none</td><td>Extra path to probe on this route during analysis.</td></tr>
+</table>
+
+<h3>Several routes in one app</h3>
+<p>Use this only for services that must switch together, such as a frontend and the BFF it was built against:</p>
+<pre><code>- name: portal
+  source: {repoURL: git@github.com:acme/deploy.git, path: apps/portal}
+  proxy:
+    routes:
+      - {name: ui,  port: 80,   rule: "Host(`portal.example.com`)"}
+      - {name: bff, port: 8080, rule: "Host(`portal.example.com`) &amp;&amp; PathPrefix(`/bff`)", healthPath: /bff/health}</code></pre>
+
+<h2>App names and validation</h2>
+<p>An app name must match <code>^[a-z0-9][a-z0-9-]{0,40}$</code> and be unique. <code>duod validate</code> reports every problem at once.
+For Apache apps see <a href="{{BASE}}/apache/">Apache instead of Traefik</a>.</p>
