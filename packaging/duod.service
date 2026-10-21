@@ -1,0 +1,17 @@
+[Unit]
+Description=duod - GitOps blue/green operator for Docker Compose
+Documentation=https://github.com/pierrejochem/duod
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+# Runs as root: it talks to the Docker socket and writes the proxy config.
+EnvironmentFile=/etc/duod/env
+ExecStart=/usr/bin/duod run -config /etc/duod/duod.yaml -log-format json
+Restart=always
+RestartSec=5
+StateDirectory=duod
+
+[Install]
+WantedBy=multi-user.target

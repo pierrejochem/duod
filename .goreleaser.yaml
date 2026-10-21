@@ -1,0 +1,74 @@
+version: 2
+
+project_name: duod
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: duod
+    main: ./cmd/duod
+    binary: duod
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: tarball
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - packaging/duod.service
+      - src: examples/duod.yaml
+        dst: examples/duod.yaml
+
+nfpms:
+  - id: packages
+    package_name: duod
+    file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    vendor: Pierre Jochem
+    maintainer: Pierre Jochem <pierrejochem@msn.com>
+    homepage: https://github.com/pierrejochem/duod
+    description: GitOps blue/green operator for Docker Compose, switched by Traefik
+    license: UNLICENSED
+    formats: [deb, rpm]
+    bindir: /usr/bin
+    contents:
+      - src: packaging/duod.service
+        dst: /lib/systemd/system/duod.service
+        file_info:
+          mode: 0644
+      - src: examples/duod.yaml
+        dst: /etc/duod/duod.yaml.example
+        type: config
+      - dst: /etc/duod/traefik
+        type: dir
+      - dst: /var/lib/duod
+        type: dir
+    scripts:
+      postinstall: packaging/postinstall.sh
+      preremove: packaging/preremove.sh
+    recommends: [git]
+    rpm:
+      group: System Environment/Daemons
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs?:"
+      - "^test:"
+      - "^ci:"
+
+release:
+  draft: false
