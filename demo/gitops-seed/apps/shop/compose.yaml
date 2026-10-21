@@ -1,0 +1,17 @@
+# shop - customer web UI. Released by changing the image tag below.
+# duod deploys this file as project shop-blue / shop-green.
+services:
+  web:
+    image: localhost:5050/apps/shop:1.0.0
+    restart: unless-stopped
+    environment:
+      APP_NAME: shop
+      KIND: web
+      BG_SLOT: ${BG_SLOT}
+      BG_REVISION: ${BG_REVISION}
+      START_DELAY: "2"              # makes the analysis phase visible on stage
+    networks: [duod-edge]
+
+networks:
+  duod-edge:
+    external: true

@@ -1,0 +1,12 @@
+# apps/api/compose.yaml - an independent service with its own release cycle.
+services:
+  api:
+    image: ghcr.io/acme/api:4.2.1
+    restart: unless-stopped
+    environment:
+      APP_REVISION: ${BG_REVISION}
+    networks: [default, duod-edge]
+
+networks:
+  duod-edge:
+    external: true

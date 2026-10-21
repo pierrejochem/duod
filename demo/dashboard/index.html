@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>duod live demo</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+:root{
+  --navy:#0B2545; --ink:#E9F1FB; --muted:#9FB3C8; --panel:#10305A; --line:#1E4473;
+  --blue:#1D8CF8; --green:#20C38B; --red:#F2555A; --amber:#F5B544; --violet:#A78BFA;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#081B33;color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:18px 28px;border-bottom:1px solid var(--line);background:var(--navy)}
+header .brand{display:flex;align-items:center;gap:14px}
+header h1{margin:0;font-size:22px;font-weight:700;letter-spacing:.01em}
+header h1 span{color:var(--muted);font-weight:500}
+.conn{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+.conn b{color:var(--green)} .conn.down b{color:var(--red)}
+main{padding:24px 28px;display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.name{font-size:26px;font-weight:800}
+.host{font:13px ui-monospace,Menlo,monospace;color:var(--muted);text-decoration:none}
+.host:hover{color:var(--ink)}
+.badge{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:5px 12px;border-radius:999px;border:1px solid currentColor}
+.Healthy{color:var(--green)} .Progressing{color:var(--amber)} .Paused{color:var(--violet)} .Degraded{color:var(--red)} .New{color:var(--muted)}
+.sync{font-size:13px;color:var(--muted)}
+.slots{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.slot{border-radius:14px;padding:12px 14px;border:2px solid var(--line);min-height:84px;display:flex;flex-direction:column;gap:4px;transition:all .3s}
+.slot .label{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.slot .role{font-size:15px;font-weight:700}
+.slot .rev{font:12px ui-monospace,Menlo,monospace;color:var(--muted)}
+.slot.blue .label{color:var(--blue)} .slot.green .label{color:var(--green)}
+.slot.active.blue{background:var(--blue);border-color:var(--blue)} .slot.active.green{background:var(--green);border-color:var(--green)}
+.slot.active .label,.slot.active .role{color:#06172C} .slot.active .rev{color:#0B2545}
+.slot.preview{border-style:dashed} .slot.preview.blue{border-color:var(--blue)} .slot.preview.green{border-color:var(--green)}
+.slot.idle{opacity:.45}
+.live{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.ver{font-size:44px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.served{font-size:14px;color:var(--muted)}
+.strip{display:grid;grid-template-columns:repeat(60,1fr);gap:2px;height:22px}
+.strip i{border-radius:2px;background:#16385F}
+.strip i.blue{background:var(--blue)} .strip i.green{background:var(--green)} .strip i.err{background:var(--red)}
+.counters{display:flex;gap:18px;font:13px ui-monospace,Menlo,monospace;color:var(--muted)}
+.counters b{color:var(--ink)} .counters .bad b{color:var(--red)}
+.msg{font-size:14px;color:var(--muted);min-height:40px;line-height:1.4;overflow-wrap:anywhere}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;font-size:14px;font-weight:700;border-radius:10px;padding:10px 16px;min-height:44px;border:1px solid var(--line);background:#16385F;color:var(--ink);cursor:pointer}
+button:hover:not(:disabled){border-color:var(--ink)}
+button:disabled{opacity:.35;cursor:not-allowed}
+button.primary:not(:disabled){background:var(--green);border-color:var(--green);color:#06172C}
+button.danger:not(:disabled){border-color:var(--red);color:#FFB3B5}
+.events{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:13px}
+.events li{display:grid;grid-template-columns:74px 150px 1fr;gap:8px;color:var(--muted)}
+.events b{color:var(--ink);font-weight:600}
+.events span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+footer{padding:4px 28px 28px;display:flex;gap:20px;flex-wrap:wrap;font-size:14px}
+footer a{color:var(--muted)} footer a:hover{color:var(--ink)}
+.toast{position:fixed;right:20px;bottom:20px;background:var(--navy);border:1px solid var(--line);border-radius:12px;padding:12px 16px;font-size:14px;max-width:420px;display:none}
+@media (max-width:520px){ .events li{grid-template-columns:70px 1fr} .events li span:last-child{display:none} }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 128 128" width="40" height="40" aria-hidden="true"><rect width="128" height="128" rx="30" fill="#13355F"/><rect x="25" y="31" width="48" height="27" rx="6" fill="#1D8CF8"/><rect x="55" y="70" width="48" height="27" rx="6" fill="#20C38B"/><path d="M96.14 25.70 A50 50 0 0 1 112.91 74.40" fill="none" stroke="#1D8CF8" stroke-width="7" stroke-linecap="round"/><path d="M111.27 82.10 L120.46 74.21 L106.08 71.16 Z" fill="#1D8CF8"/><path d="M31.86 102.30 A50 50 0 0 1 15.09 53.60" fill="none" stroke="#20C38B" stroke-width="7" stroke-linecap="round"/><path d="M16.73 45.90 L7.54 53.79 L21.92 56.84 Z" fill="#20C38B"/></svg>
+    <h1>duod <span>· live blue/green</span></h1>
+  </div>
+  <div class="conn" id="conn">duod API: <b>connecting…</b></div>
+</header>
+<main id="apps"></main>
+<footer>
+  <a id="l-portus" href="http://localhost:3000" target="_blank" rel="noopener">Portus registry UI</a>
+  <a id="l-traefik" href="http://localhost:8081/dashboard/" target="_blank" rel="noopener">Traefik dashboard</a>
+  <span style="color:var(--muted)">Each card polls its service ~4×/s through Traefik: blue/green = color that answered, red = failed request.</span>
+</footer>
+<div class="toast" id="toast" role="status"></div>
+<script src="config.js"></script>
+<script>
+const CFG = Object.assign({token: "", httpPort: ""}, window.DUOD || {});
+const port = CFG.httpPort && CFG.httpPort !== "80" ? ":" + CFG.httpPort : "";
+const traffic = {};   // app -> {cells:[], ok, err, last}
+const cards = {};
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) e.append(k);
+  return e;
+}
+const short = s => (s || "").slice(0, 8);
+const time = t => new Date(t).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit"});
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.style.display = "block";
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 4000);
+}
+
+async function act(app, action) {
+  try {
+    const r = await fetch(`/duod/api/v1/apps/${app}/${action}`, {method: "POST", headers: {Authorization: "Bearer " + CFG.token}});
+    const body = await r.json().catch(() => ({}));
+    toast(r.ok ? `${action} ${app}: ok` : `${action} ${app}: ${body.error || r.status}`);
+  } catch (e) { toast(`${action} ${app}: ${e}`); }
+}
+
+function card(app) {
+  const c = {
+    name: el("div", {class: "name"}, app),
+    host: el("a", {class: "host", href: `http://${app}.localhost${port}`, target: "_blank", rel: "noopener"}, `${app}.localhost`),
+    badge: el("span", {class: "badge"}), sync: el("span", {class: "sync"}),
+    blue: el("div", {class: "slot blue"}), green: el("div", {class: "slot green"}),
+    ver: el("div", {class: "ver"}, "–"), served: el("div", {class: "served"}),
+    strip: el("div", {class: "strip", "aria-label": "last 60 requests"}),
+    counters: el("div", {class: "counters"}), msg: el("div", {class: "msg"}),
+    promote: el("button", {class: "primary", onclick: () => act(app, "promote")}, "Promote"),
+    abort: el("button", {onclick: () => act(app, "abort")}, "Abort"),
+    rollback: el("button", {class: "danger", onclick: () => act(app, "rollback")}, "Rollback"),
+    retry: el("button", {onclick: () => act(app, "retry")}, "Retry"),
+    events: el("ul", {class: "events"}),
+  };
+  for (let i = 0; i < 60; i++) c.strip.append(el("i"));
+  c.root = el("section", {class: "card", "aria-label": app},
+    el("div", {class: "row"}, el("div", {}, c.name, c.host), el("div", {class: "row"}, c.sync, c.badge)),
+    el("div", {class: "slots"}, c.blue, c.green),
+    el("div", {class: "live"}, c.ver, c.served),
+    c.strip, c.counters, c.msg,
+    el("div", {class: "actions"}, c.promote, c.abort, c.rollback, c.retry),
+    c.events);
+  document.getElementById("apps").append(c.root);
+  traffic[app] = {cells: [], ok: 0, err: 0};
+  poll(app);
+  return c;
+}
+
+function slotBox(box, color, a) {
+  let role = "idle", rev = "";
+  if (a.activeSlot === color) { role = "active"; rev = a.activeRevision; }
+  else if (a.previewSlot === color) { role = "preview"; rev = a.previewRevision; }
+  else if (a.previousSlot === color) { role = "previous"; rev = a.previousRevision; }
+  box.className = `slot ${color} ${role === "previous" ? "idle" : role}`;
+  const label = {active: "serving traffic", preview: a.previewReadySince ? "preview · healthy" : "preview · analysing", previous: "kept for rollback", idle: "empty"}[role];
+  box.replaceChildren(el("div", {class: "label"}, color), el("div", {class: "role"}, label), el("div", {class: "rev"}, rev ? "rev " + short(rev) : ""));
+}
+
+function render(a) {
+  const c = cards[a.name] || (cards[a.name] = card(a.name));
+  c.badge.className = "badge " + a.phase; c.badge.textContent = a.phase;
+  c.sync.textContent = a.sync;
+  slotBox(c.blue, "blue", a); slotBox(c.green, "green", a);
+  c.msg.textContent = a.message || "";
+  c.promote.disabled = a.phase !== "Paused";
+  c.abort.disabled = !a.previewSlot;
+  c.rollback.disabled = !a.previousSlot || !!a.previewSlot;
+  c.retry.disabled = !a.failedRevision;
+  const ev = (a.history || []).slice(-4).reverse();
+  c.events.replaceChildren(...ev.map(e => el("li", {}, el("span", {}, time(e.time)), el("b", {}, e.type), el("span", {title: e.message}, e.message))));
+}
+
+async function poll(app) {
+  const t = traffic[app], c = () => cards[app];
+  try {
+    const r = await fetch(`http://${app}.localhost${port}/api/info`, {cache: "no-store"});
+    if (!r.ok) throw new Error(r.status);
+    const i = await r.json();
+    t.ok++; t.cells.push(i.slot);
+    c().ver.textContent = i.version; c().ver.style.color = i.accent;
+    c().served.textContent = `served by ${i.slot} · ${i.host}`;
+  } catch (e) {
+    t.err++; t.cells.push("err");
+  }
+  if (t.cells.length > 60) t.cells.shift();
+  const cells = c().strip.children;
+  for (let i = 0; i < 60; i++) cells[i].className = t.cells[i - (60 - t.cells.length)] || "";
+  c().counters.replaceChildren(el("span", {}, "ok ", el("b", {}, String(t.ok))), el("span", {class: "bad"}, "failed ", el("b", {}, String(t.err))));
+  setTimeout(() => poll(app), 250);
+}
+
+async function refresh() {
+  const conn = document.getElementById("conn");
+  try {
+    const r = await fetch("/duod/api/v1/apps", {cache: "no-store"});
+    const apps = await r.json();
+    apps.forEach(render);
+    conn.className = "conn"; conn.innerHTML = "duod API: <b>connected</b>";
+  } catch (e) {
+    conn.className = "conn down"; conn.innerHTML = "duod API: <b>unreachable</b>";
+  }
+  setTimeout(refresh, 700);
+}
+refresh();
+</script>
+</body>
+</html>

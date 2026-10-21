@@ -1,0 +1,153 @@
+# duod live demo - infrastructure. Start it with ./demo.sh up (not directly):
+# the script creates secrets, certificates and the Git repo first.
+#
+#   http://dashboard.localhost   live dashboard (state + traffic)
+#   http://shop.localhost        demo apps (also api., docs., preview.shop.)
+#   http://localhost:3000        Portus (registry UI + token auth)
+#   localhost:5050               Docker registry (behind Portus auth)
+#   http://localhost:8081        Traefik dashboard
+#   http://localhost:9800        duod API (loopback only)
+name: duod-demo
+
+x-portus-env: &portus-env
+  PORTUS_MACHINE_FQDN_VALUE: localhost          # = token issuer
+  PORTUS_DB_HOST: db
+  PORTUS_DB_DATABASE: portus_production
+  PORTUS_DB_PASSWORD: ${DATABASE_PASSWORD}
+  PORTUS_DB_POOL: "5"
+  PORTUS_SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+  PORTUS_KEY_PATH: /certificates/portus.key     # signs registry tokens
+  PORTUS_PASSWORD: ${PORTUS_PASSWORD}           # internal "portus" user
+  PORTUS_CHECK_SSL_USAGE_ENABLED: "false"       # local demo over plain HTTP
+  PORTUS_SIGNUP_ENABLED: "false"
+  PORTUS_DELETE_ENABLED: "true"
+  RAILS_SERVE_STATIC_FILES: "true"
+
+services:
+  # ---------------------------------------------------------------- registry
+  db:
+    image: mariadb:10.4
+    command: mysqld --character-set-server=utf8 --collation-server=utf8_unicode_ci --init-connect='SET NAMES UTF8;' --innodb-flush-log-at-trx-commit=0
+    environment:
+      MYSQL_DATABASE: portus_production
+      MYSQL_ROOT_PASSWORD: ${DATABASE_PASSWORD}
+    volumes: [mariadb:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 3s
+      retries: 40
+    networks: [internal]
+
+  portus:
+    image: opensuse/portus:2.4.3        # last release; the project is archived
+    platform: linux/amd64               # emulated on Apple Silicon (slower first start)
+    environment: *portus-env
+    ports: ["3000:3000"]                # UI + token realm (Docker clients call it)
+    volumes: [./.state/secrets:/certificates:ro]
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [internal]
+
+  background:
+    image: opensuse/portus:2.4.3
+    platform: linux/amd64
+    environment:
+      <<: *portus-env
+      CCONFIG_PREFIX: PORTUS
+      PORTUS_BACKGROUND: "true"
+    volumes: [./.state/secrets:/certificates:ro]
+    # Share Portus' network namespace: the registry's token realm is
+    # http://localhost:3000, which must reach Portus from here as well.
+    network_mode: "service:portus"
+    depends_on: [portus]
+
+  registry:
+    image: registry:2.8.3
+    environment:
+      REGISTRY_AUTH_TOKEN_REALM: http://localhost:3000/v2/token
+      REGISTRY_AUTH_TOKEN_SERVICE: localhost:5050           # = Portus external hostname
+      REGISTRY_AUTH_TOKEN_ISSUER: localhost
+      REGISTRY_AUTH_TOKEN_ROOTCERTBUNDLE: /secrets/portus.crt
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+      REGISTRY_NOTIFICATIONS_ENDPOINTS: >
+        - name: portus
+          url: http://portus:3000/v2/webhooks/events
+          timeout: 2000ms
+          threshold: 5
+          backoff: 1s
+    ports: ["5050:5000"]                # localhost:* is an insecure registry by default
+    volumes:
+      - registry:/var/lib/registry
+      - ./.state/secrets:/secrets:ro
+    networks: [internal]
+
+  # ----------------------------------------------------------- traffic switch
+  traefik:
+    image: traefik:v3.6
+    command:
+      - --entrypoints.web.address=:80
+      - --entrypoints.duod.address=:8099          # private: duod's probes only
+      - --providers.file.directory=/dynamic       # duod writes <app>.yaml here
+      - --providers.file.watch=true
+      - --providers.docker=true                   # dashboard + duod API routes
+      - --providers.docker.exposedbydefault=false # never auto-route slot containers
+      - --providers.docker.network=duod-edge
+      - --api.insecure=true                       # Traefik dashboard on :8081
+      - --log.level=INFO
+    ports:
+      - "${DEMO_HTTP_PORT:-80}:80"
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - dynamic:/dynamic:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [edge]
+
+  # --------------------------------------------------------------------- duod
+  duod:
+    build:
+      context: ..
+      dockerfile: examples/duod-in-docker/Dockerfile
+    image: duod:demo
+    environment:
+      DUOD_TOKEN: ${DUOD_TOKEN}
+    ports: ["127.0.0.1:9800:9800"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./duod/duod.yaml:/etc/duod/duod.yaml:ro
+      - ./.state/gitops.git:/gitops.git:ro        # the demo's "Git server"
+      - dynamic:/dynamic
+      - duod-state:/var/lib/duod
+      - duod-docker:/root/.docker                 # registry login (pulls from Portus)
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.duod-api.rule=Host(`dashboard.localhost`) && PathPrefix(`/duod`)
+      - traefik.http.routers.duod-api.entrypoints=web
+      - traefik.http.routers.duod-api.middlewares=duod-strip
+      - traefik.http.middlewares.duod-strip.stripprefix.prefixes=/duod
+      - traefik.http.services.duod-api.loadbalancer.server.port=9800
+    networks: [edge]
+    restart: unless-stopped
+
+  dashboard:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+      - ./.state/dashboard-config.js:/usr/share/nginx/html/config.js:ro
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dashboard.rule=Host(`dashboard.localhost`)
+      - traefik.http.routers.dashboard.entrypoints=web
+      - traefik.http.services.dashboard.loadbalancer.server.port=80
+    networks: [edge]
+
+volumes:
+  mariadb:
+  registry:
+  dynamic:
+  duod-state:
+  duod-docker:
+
+networks:
+  internal:
+  edge:
+    name: duod-edge          # slot compose files join it as an external network

@@ -1,0 +1,64 @@
+# duod configuration for the live demo (runs inside the duod container).
+listen: 0.0.0.0:9800
+stateDir: /var/lib/duod
+apiToken: ${DUOD_TOKEN}
+webhookSecret: ${DUOD_TOKEN}       # the git hook authenticates with the same token
+reconcileInterval: 1s
+docker: ["docker", "compose"]
+maxConcurrentRollouts: 2           # release all 3 at once -> one waits in the queue
+
+traefik:
+  dynamicDir: /dynamic             # volume shared with Traefik's file provider
+  network: duod-edge
+  probeURL: http://traefik:8099    # Traefik's private entrypoint on duod-edge
+  probeEntryPoint: duod
+  confirmTimeout: 20s
+
+apps:
+  # Customer-facing UI: manual promotion - the presenter's "go" moment.
+  - name: shop
+    source: {repoURL: /gitops.git, revision: main, path: apps/shop, pollInterval: 15s, pull: always}
+    healthCheck: {path: /health, interval: 1s, timeout: 2s, successThreshold: 5, failureThreshold: 3,
+                  progressDeadline: 60s, revisionHeader: X-Revision}
+    strategy: {autoPromotionEnabled: false, scaleDownDelay: 10m}
+    proxy:
+      type: traefik
+      routes:
+        - name: web
+          service: web
+          port: 8080
+          rule: Host(`shop.localhost`)
+          previewRule: Host(`preview.shop.localhost`)
+          entryPoints: [web]
+
+  # JSON API with 2 replicas: promoted automatically once healthy.
+  - name: api
+    source: {repoURL: /gitops.git, revision: main, path: apps/api, pollInterval: 15s, pull: always}
+    healthCheck: {path: /health, interval: 1s, timeout: 2s, successThreshold: 3, failureThreshold: 3,
+                  progressDeadline: 25s, revisionHeader: X-Revision}
+    strategy: {autoPromotionEnabled: true, scaleDownDelay: 10m}
+    proxy:
+      type: traefik
+      routes:
+        - name: api
+          service: api
+          port: 8080
+          replicas: 2
+          rule: Host(`api.localhost`)
+          entryPoints: [web]
+
+  # Docs site: promoted automatically.
+  - name: docs
+    source: {repoURL: /gitops.git, revision: main, path: apps/docs, pollInterval: 15s, pull: always}
+    healthCheck: {path: /health, interval: 1s, timeout: 2s, successThreshold: 3, failureThreshold: 3,
+                  progressDeadline: 25s, revisionHeader: X-Revision}
+    strategy: {autoPromotionEnabled: true, scaleDownDelay: 10m}
+    proxy:
+      type: traefik
+      routes:
+        - name: web
+          service: web
+          port: 8080
+          rule: Host(`docs.localhost`)
+          previewRule: Host(`preview.docs.localhost`)
+          entryPoints: [web]

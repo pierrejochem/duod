@@ -1,0 +1,19 @@
+# /etc/systemd/system/duod.service
+[Unit]
+Description=duod - GitOps blue/green operator for Docker Compose + Apache
+After=network-online.target docker.service apache2.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+# Runs as root because it writes /etc/apache2/duod and calls apachectl.
+# Alternative: a dedicated user in the docker group, write access to
+# /etc/apache2/duod and a sudoers entry, see README.
+EnvironmentFile=/etc/duod/env
+ExecStart=/usr/local/bin/duod run -config /etc/duod/duod.yaml -log-format json
+Restart=always
+RestartSec=5
+StateDirectory=duod
+
+[Install]
+WantedBy=multi-user.target

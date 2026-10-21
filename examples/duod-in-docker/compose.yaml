@@ -1,0 +1,26 @@
+# Run duod next to Traefik:
+#   docker build -f examples/duod-in-docker/Dockerfile -t duod .
+#   docker compose -p duod -f examples/duod-in-docker/compose.yaml up -d
+#
+# In duod.yaml for this setup set:
+#   listen: 0.0.0.0:9800
+#   traefik.probeURL: http://traefik:8099    (Traefik's name on duod-edge)
+services:
+  duod:
+    image: duod
+    restart: unless-stopped
+    env_file: /etc/duod/env
+    ports:
+      - "127.0.0.1:9800:9800"              # API, webhooks, /metrics
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/duod:/etc/duod                # duod.yaml + traefik/ (shared with Traefik)
+      # SAME path inside and outside: the host daemon resolves relative
+      # bind mounts of the slot compose files against this path.
+      - /var/lib/duod:/var/lib/duod
+      - ./ssh:/root/.ssh:ro                # deploy key for git@ repos
+    networks: [duod-edge]
+
+networks:
+  duod-edge:
+    external: true

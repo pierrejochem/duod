@@ -1,0 +1,18 @@
+# build output
+/bin/
+*.zip
+
+# IDE
+.idea/
+.vscode/
+
+# demo runtime state (secrets, generated git repos)
+.state/
+
+# env files and keys
+.env
+*.pem
+*.key
+
+# OS
+.DS_Store

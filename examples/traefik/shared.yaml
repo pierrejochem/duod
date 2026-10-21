@@ -1,0 +1,13 @@
+# Middlewares shared by several apps, referenced as <name>@file in duod.yaml.
+# Not managed by duod (its own files are named <app>.yaml).
+http:
+  middlewares:
+    secure-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        frameDeny: true
+    office-only:
+      ipAllowList:
+        sourceRange: ["10.0.0.0/8", "192.168.0.0/16"]

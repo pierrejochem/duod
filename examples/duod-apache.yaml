@@ -1,0 +1,66 @@
+# /etc/duod/duod.yaml - Apache variant (host Apache is the traffic switch)
+listen: 127.0.0.1:9800            # REST API, webhook and /metrics
+stateDir: /var/lib/duod            # state JSON, git mirrors, per-slot checkouts
+apiToken: ${DUOD_TOKEN}            # Bearer token for promote/abort/rollback/...
+reconcileInterval: 5s
+
+docker: ["docker", "compose"]      # e.g. ["docker", "--context", "prod", "compose"]
+apache:
+  configTest: ["apachectl", "configtest"]   # or ["sudo", "apachectl", "configtest"]
+  reload:     ["apachectl", "graceful"]     # graceful = open connections are kept
+
+apps:
+  - name: shop
+    source:
+      repoURL: git@github.com:acme/deploy.git
+      revision: main               # branch, tag or commit
+      path: apps/shop              # folder with the compose file
+      composeFile: compose.yaml
+      pollInterval: 1m             # webhooks make this near-instant
+      webhookSecret: ${SHOP_WEBHOOK_SECRET}
+      pull: always                 # compose --pull: always|missing|never
+
+    slots:                         # each color publishes on its own loopback port
+      blue:  {port: 8081}
+      green: {port: 8082}
+
+    healthCheck:                   # pre-promotion analysis on the preview slot
+      path: /health
+      expectStatus: 200
+      interval: 2s
+      timeout: 2s
+      successThreshold: 5          # consecutive successes required
+      failureThreshold: 3          # active slot: failures before self-heal
+      progressDeadline: 5m
+      revisionHeader: X-Revision   # optional: app must echo ${BG_REVISION}
+
+    strategy:                      # same semantics as Argo Rollouts blueGreen
+      autoPromotionEnabled: false  # false = pause and wait for `duod promote shop`
+      autoPromotionSeconds: 0      # >0: promote automatically after N s paused
+      scaleDownDelay: 10m          # keep the old slot running for instant rollback
+      selfHeal: true
+      postPromotionAnalysis:       # optional: watch the public URL after the switch
+        url: https://shop.example.com/health
+        duration: 2m
+        interval: 5s
+        failureThreshold: 3        # -> automatic rollback
+
+    proxy:
+      type: apache
+      configFile: /etc/apache2/duod/shop.conf   # included by the VirtualHost
+      # Go template. Fields: .App .ActiveSlot .ActivePort .ActiveRevision
+      # .PreviewSlot .PreviewPort .PreviewRevision .PreviewOrActivePort
+      template: |
+        ProxyPreserveHost On
+        RequestHeader set X-Forwarded-Proto "https"
+        Header always set X-Served-By "{{.ActiveSlot}}"
+        {{- if .PreviewPort}}
+        # Preview for smoke tests while a rollout is paused
+        <Location "/_preview/">
+            Require ip 10.0.0.0/8 192.168.0.0/16
+        </Location>
+        ProxyPass        /_preview/ http://127.0.0.1:{{.PreviewPort}}/
+        ProxyPassReverse /_preview/ http://127.0.0.1:{{.PreviewPort}}/
+        {{- end}}
+        ProxyPass        / http://127.0.0.1:{{.ActivePort}}/ retry=0
+        ProxyPassReverse / http://127.0.0.1:{{.ActivePort}}/

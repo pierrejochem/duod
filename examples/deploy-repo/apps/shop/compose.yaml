@@ -1,0 +1,40 @@
+# apps/shop/compose.yaml in the GitOps repo. duod runs it twice, as the
+# compose projects "shop-blue" and "shop-green", and injects
+#   BG_APP, BG_SLOT (blue|green), BG_REVISION (git sha)
+#
+# Rules for a slot compose file (Traefik mode):
+#   - every routed service joins the external network duod-edge
+#   - no published ports and no container_name (both colors run side by side;
+#     Traefik reaches them as shop-<slot>-web-<n> on duod-edge)
+#   - no stateful services here: databases, caches and queues are shared by
+#     both colors and live in their own, non-slotted compose project
+services:
+  web:
+    image: ghcr.io/acme/shop:1.8.0          # bump this line to release
+    restart: unless-stopped
+    deploy:
+      replicas: 2                           # = routes[].replicas in duod.yaml
+    environment:
+      APP_REVISION: ${BG_REVISION}          # echo as X-Revision (healthCheck.revisionHeader)
+      APP_SLOT: ${BG_SLOT}
+      DATABASE_URL: postgres://shop@db:5432/shop
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 5s
+      retries: 3
+    networks: [default, duod-edge, shared]
+
+  worker:                                   # not routed -> no duod-edge needed
+    image: ghcr.io/acme/shop:1.8.0
+    command: ["bin/worker"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://shop@db:5432/shop
+    networks: [shared]
+
+networks:
+  duod-edge:
+    external: true
+  shared:
+    external: true            # created by the shared-infra project (db, redis)
+    name: shop-shared

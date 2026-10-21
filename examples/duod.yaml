@@ -1,0 +1,91 @@
+# /etc/duod/duod.yaml - Traefik variant
+#
+# Every independent service is its own app: its own folder in Git, its own
+# blue/green slots, its own Traefik file and its own rollout. Services
+# deploy, fail and roll back without touching each other, and several can
+# roll out at the same time.
+listen: 127.0.0.1:9800
+stateDir: /var/lib/duod
+apiToken: ${DUOD_TOKEN}
+reconcileInterval: 5s
+docker: ["docker", "compose"]
+
+maxConcurrentRollouts: 3          # parallel deploys (image pulls); 0 = unlimited
+webhookSecret: ${DUOD_WEBHOOK_SECRET}   # POST /api/v1/webhook refreshes all apps
+
+traefik:
+  dynamicDir: /etc/duod/traefik   # Traefik: providers.file.directory (mounted)
+  network: duod-edge              # shared by Traefik and every slot; created if missing
+  probeURL: http://127.0.0.1:8099 # Traefik's private "duod" entrypoint
+  probeEntryPoint: duod
+  confirmTimeout: 30s             # max wait until Traefik serves a new file
+
+# Defaults shared by the apps below (YAML anchors keep it short).
+x-health: &health
+  path: /health
+  interval: 2s
+  successThreshold: 5
+  failureThreshold: 3
+  progressDeadline: 5m
+  revisionHeader: X-Revision     # optional: app echoes ${BG_REVISION}
+x-strategy: &strategy
+  autoPromotionEnabled: false    # pause until `duod promote <app>`
+  scaleDownDelay: 10m
+x-source: &source
+  repoURL: git@github.com:acme/deploy.git
+  revision: main
+  pollInterval: 1m
+  pull: always
+
+apps:
+  - name: shop
+    source: {<<: *source, path: apps/shop}   # only commits touching apps/shop redeploy it
+    healthCheck: *health
+    strategy: *strategy
+    proxy:
+      type: traefik
+      routes:
+        - name: web
+          service: web                     # compose service
+          port: 3000                       # container port
+          replicas: 2                      # compose replicas -> shop-<slot>-web-1..2
+          rule: Host(`shop.example.com`)
+          previewRule: Host(`preview.shop.example.com`)   # optional preview URL
+          entryPoints: [websecure]
+          tls: {certResolver: le}
+          middlewares: [secure-headers@file]
+
+  - name: api
+    source: {<<: *source, path: apps/api}
+    healthCheck: {path: /v1/health, interval: 2s, successThreshold: 5, progressDeadline: 3m}
+    strategy: {autoPromotionEnabled: true, scaleDownDelay: 10m}   # promote automatically
+    proxy:
+      type: traefik
+      routes:
+        - name: api
+          port: 8080
+          rule: Host(`api.example.com`)
+          tls: {certResolver: le}
+
+  - name: admin
+    source: {<<: *source, path: apps/admin}
+    healthCheck: *health
+    strategy: *strategy
+    proxy:
+      type: traefik
+      routes:
+        - name: admin
+          port: 80
+          rule: Host(`admin.example.com`)
+          tls: {certResolver: le}
+          middlewares: [office-only@file]
+
+  # Only for services that MUST switch together (e.g. a frontend and the BFF
+  # it is built against): list both as routes of ONE app - they share one
+  # Traefik file and change color in the same atomic write.
+  # - name: portal
+  #   proxy:
+  #     type: traefik
+  #     routes:
+  #       - {name: ui,  port: 80,   rule: "Host(`portal.example.com`)"}
+  #       - {name: bff, port: 8080, rule: "Host(`portal.example.com`) && PathPrefix(`/bff`)", healthPath: /bff/health}

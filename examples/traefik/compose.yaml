@@ -1,0 +1,37 @@
+# Traefik in Docker as duod's traffic switch.
+#   docker network create duod-edge     (duod also creates it)
+#   docker compose -p traefik up -d
+services:
+  traefik:
+    image: traefik:v3.6
+    restart: unless-stopped
+    command:
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.websecure.address=:443
+      # private entrypoint for duod's health checks and switch confirmation
+      - --entrypoints.duod.address=:8099
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      - --certificatesresolvers.le.acme.email=ops@example.com
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      # optional: also route plain containers by labels
+      # - --providers.docker=true
+      # - --providers.docker.exposedbydefault=false
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:8099:8099"     # duod on the host -> probe entrypoint; never public
+    volumes:
+      - /etc/duod/traefik:/etc/traefik/dynamic:ro   # duod writes <app>.yaml here
+      - ./shared.yaml:/etc/traefik/dynamic/_shared.yaml:ro
+      - letsencrypt:/letsencrypt
+    networks: [duod-edge]
+
+volumes:
+  letsencrypt:
+
+networks:
+  duod-edge:
+    external: true

@@ -1,0 +1,17 @@
+# api - JSON service, independent release cycle, promoted automatically.
+services:
+  api:
+    image: localhost:5050/apps/api:1.0.0
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+    environment:
+      APP_NAME: api
+      KIND: api
+      BG_SLOT: ${BG_SLOT}
+      BG_REVISION: ${BG_REVISION}
+    networks: [duod-edge]
+
+networks:
+  duod-edge:
+    external: true

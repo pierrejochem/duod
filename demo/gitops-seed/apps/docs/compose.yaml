@@ -1,0 +1,15 @@
+# docs - documentation site, independent release cycle, promoted automatically.
+services:
+  web:
+    image: localhost:5050/apps/docs:1.0.0
+    restart: unless-stopped
+    environment:
+      APP_NAME: docs
+      KIND: web
+      BG_SLOT: ${BG_SLOT}
+      BG_REVISION: ${BG_REVISION}
+    networks: [duod-edge]
+
+networks:
+  duod-edge:
+    external: true
