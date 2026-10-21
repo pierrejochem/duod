@@ -1,14 +1,15 @@
 # /etc/systemd/system/duod.service
 [Unit]
-Description=duod - GitOps blue/green operator for Docker Compose + Apache
-After=network-online.target docker.service apache2.service
+Description=duod - GitOps blue/green operator for Docker Compose
+After=network-online.target docker.service
 Wants=network-online.target
 Requires=docker.service
 
 [Service]
-# Runs as root because it writes /etc/apache2/duod and calls apachectl.
-# Alternative: a dedicated user in the docker group, write access to
-# /etc/apache2/duod and a sudoers entry, see README.
+# Runs as root: it talks to the Docker socket and writes the proxy config.
+# For `make install` (binary in /usr/local/bin). The deb/rpm packages ship
+# packaging/duod.service instead, which uses /usr/bin/duod.
+# Apache users: add apache2.service to After= and see README "Apache instead of Traefik".
 EnvironmentFile=/etc/duod/env
 ExecStart=/usr/local/bin/duod run -config /etc/duod/duod.yaml -log-format json
 Restart=always

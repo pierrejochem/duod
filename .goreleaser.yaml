@@ -25,6 +25,7 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
+      - LICENSE
       - packaging/duod.service
       - src: examples/duod.yaml
         dst: examples/duod.yaml
@@ -37,7 +38,7 @@ nfpms:
     maintainer: Pierre Jochem <pierrejochem@msn.com>
     homepage: https://github.com/pierrejochem/duod
     description: GitOps blue/green operator for Docker Compose, switched by Traefik
-    license: UNLICENSED
+    license: Apache-2.0
     formats: [deb, rpm]
     bindir: /usr/bin
     contents:
@@ -48,6 +49,8 @@ nfpms:
       - src: examples/duod.yaml
         dst: /etc/duod/duod.yaml.example
         type: config
+      - src: LICENSE
+        dst: /usr/share/doc/duod/LICENSE
       - dst: /etc/duod/traefik
         type: dir
       - dst: /var/lib/duod

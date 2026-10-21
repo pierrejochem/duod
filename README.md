@@ -242,3 +242,7 @@ is redone. A paused preview stays paused.
   reference them by tag or digest in Git.
 - Requires Traefik v3 (the `Header()` rule syntax and the `noop@internal` service).
   Use v3.6 or newer with Docker Engine 29+.
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE).
