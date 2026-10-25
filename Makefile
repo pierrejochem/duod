@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: help build build-arm64 test lint install validate-examples docs docs-serve demo-prepare demo-up demo-watch demo-open demo-down demo-reset
+.PHONY: help brand build build-arm64 test lint install validate-examples docs docs-serve demo-prepare demo-up demo-watch demo-open demo-down demo-reset
 
 .DEFAULT_GOAL := help
 
@@ -55,3 +55,9 @@ docs: ## Build the documentation site into docs/
 
 docs-serve: ## Build docs for localhost:8000 and serve them
 	SITE_URL=http://localhost:8000 BASE_PATH= python3 docs-src/build.py && python3 -m http.server 8000 -d docs
+
+brand: ## Re-render brand/social PNGs from their HTML sources (needs Chromium)
+	cd brand/social && CH=$${CHROME:-chromium}; \
+	$$CH --headless --no-sandbox --hide-scrollbars --window-size=1280,640 --screenshot=github-social-preview.png file://$$PWD/preview.html && \
+	$$CH --headless --no-sandbox --hide-scrollbars --window-size=1200,630 --screenshot=og-image.png file://$$PWD/og.html && \
+	$$CH --headless --no-sandbox --hide-scrollbars --window-size=1080,1080 --screenshot=square.png file://$$PWD/square.html

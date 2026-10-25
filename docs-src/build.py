@@ -190,7 +190,7 @@ def pager(idx):
 
 def layout(*, slug, title, desc, body, idx, noindex=False, canonical=None):
     canonical = canonical or url(slug)
-    og_img = f"{SITE_URL}{BASE}/assets/duod-logo.png"
+    og_img = f"{SITE_URL}{BASE}/assets/og-image.png"
     robots = '<meta name="robots" content="noindex">' if noindex else '<meta name="robots" content="index,follow,max-image-preview:large">'
     ld = "" if noindex else structured(idx, slug, title, desc, body)
     crumbs = "" if slug == "" or noindex else (
@@ -214,8 +214,10 @@ def layout(*, slug, title, desc, body, idx, noindex=False, canonical=None):
 <meta property="og:description" content="{e(desc)}">
 <meta property="og:url" content="{canonical}">
 <meta property="og:image" content="{og_img}">
-<meta property="og:image:alt" content="duod logo">
-<meta name="twitter:card" content="summary">
+<meta property="og:image:alt" content="duod: GitOps blue/green for Docker Compose">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{e(title)}">
 <meta name="twitter:description" content="{e(desc)}">
 <meta name="twitter:image" content="{og_img}">
@@ -260,6 +262,7 @@ def main():
     (OUT / "assets").mkdir(parents=True)
     for name in ("duod-logo.svg", "duod-logo-dark.svg", "duod-logo.png", "favicon.svg", "duod-mark-512.png"):
         shutil.copy(ASSETS / name, OUT / "assets" / name)
+    shutil.copy(ROOT.parent / "brand" / "social" / "og-image.png", OUT / "assets" / "og-image.png")
     shutil.copy(ROOT / "site.css", OUT / "assets" / "site.css")
     (OUT / ".nojekyll").write_text("")
 
